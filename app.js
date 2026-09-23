@@ -1,7 +1,7 @@
 'use strict';
 
-// Preencher com a URL /exec da implantação deste clone antes de publicar.
-const SCRIPT_BRIDGE_URL = 'SCRIPT_BRIDGE_URL';
+// URL /exec da implantação do clone TRANSBORDO na conta marxb50.
+const SCRIPT_BRIDGE_URL = 'https://script.google.com/macros/s/AKfycbxXOVsfgi81rqb5F_-kQY4CZwrN5XmwUSCr84E7bb3DjfdJDnrSBVkG1-W55q3MRy6n0A/exec';
 const BRIDGE_MARKER = 'selimTransbordoBridge';
 const BRIDGE_METHODS = new Set([
   'getBootstrap', 'registrarSaida', 'registrarRetorno', 'registrarColetor',
