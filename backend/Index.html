@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SELIM Transbordo — conexão de dados</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f1f6fa; color: #0d2552; font: 17px Arial, sans-serif; }
+    main { width: min(560px, calc(100% - 32px)); padding: 28px; text-align: center; background: #fff; border-top: 7px solid #ffdc00; border-radius: 22px; box-shadow: 0 14px 34px rgba(7,28,77,.12); }
+    a { display: inline-block; margin-top: 12px; padding: 13px 18px; color: #fff; background: #0d2552; border-radius: 12px; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SELIM · Transbordo</h1>
+    <p>Este endereço mantém a conexão com os dados do Transbordo.</p>
+    <a href="https://marxb50.github.io/transbordo-selim/">Abrir o programa</a>
+  </main>
+  <script>
+    'use strict';
+    const BRIDGE_SESSION = <?!= JSON.stringify(bridgeSession) ?>;
+    const ALLOWED_PARENT = 'https://marxb50.github.io';
+    const ALLOWED_METHODS = new Set([
+      'getBootstrap', 'registrarSaida', 'registrarRetorno', 'registrarColetor',
+      'getHistorico', 'gerarRelatorio', 'alterarSenhaRelatorio'
+    ]);
+    function postToApp(message) {
+      window.top.postMessage(Object.assign({
+        selimTransbordoBridge: true,
+        session: BRIDGE_SESSION
+      }, message), ALLOWED_PARENT);
+    }
+    function runMethod(method, args, id) {
+      const success = result => postToApp({ id: id, result: result });
+      const failure = error => postToApp({ id: id, error: error && error.message ? error.message : String(error) });
+      const runner = google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+      if (method === 'getBootstrap') runner.getBootstrap.apply(runner, args);
+      if (method === 'registrarSaida') runner.registrarSaida.apply(runner, args);
+      if (method === 'registrarRetorno') runner.registrarRetorno.apply(runner, args);
+      if (method === 'registrarColetor') runner.registrarColetor.apply(runner, args);
+      if (method === 'getHistorico') runner.getHistorico.apply(runner, args);
+      if (method === 'gerarRelatorio') runner.gerarRelatorio.apply(runner, args);
+      if (method === 'alterarSenhaRelatorio') runner.alterarSenhaRelatorio.apply(runner, args);
+    }
+    window.addEventListener('message', event => {
+      if (event.origin !== ALLOWED_PARENT) return;
+      const message = event.data || {};
+      if (message.selimTransbordoBridge !== true || message.session !== BRIDGE_SESSION) return;
+      if (!ALLOWED_METHODS.has(message.method)) {
+        postToApp({ id: message.id, error: 'Operação não permitida.' });
+        return;
+      }
+      runMethod(message.method, Array.isArray(message.args) ? message.args : [], message.id);
+    });
+    if (BRIDGE_SESSION) postToApp({ type: 'ready' });
+  </script>
+</body>
+</html>

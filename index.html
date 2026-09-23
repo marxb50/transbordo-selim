@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d2552">
+  <meta name="description" content="Registro de carretas e coletores do Transbordo SELIM, Parnamirim.">
+  <title>Transbordo SELIM · Parnamirim</title>
+  <link rel="icon" href="assets/logo-parnamirim.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <img class="brand-logo" src="assets/logo-parnamirim.png" alt="Prefeitura de Parnamirim — Secretaria Municipal de Limpeza Urbana" width="585" height="122">
+      <div class="brand-copy">
+        <span class="brand-kicker">SELIM · Prefeitura de Parnamirim</span>
+        <h1>Transbordo</h1>
+        <p>Registro de carretas e coletores</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <p id="systemStatus" class="system-status" role="status" aria-live="polite">Conectando aos dados...</p>
+
+    <section class="start-section" aria-labelledby="startTitle">
+      <div class="section-heading">
+        <p class="eyebrow">O que você vai registrar?</p>
+        <h2 id="startTitle">Escolha uma opção</h2>
+      </div>
+      <div class="choice-grid">
+        <button class="choice-card" id="chooseCarretas" type="button" aria-controls="carretasSection" aria-pressed="false">
+          <span class="choice-icon" aria-hidden="true">🚛</span>
+          <span class="choice-copy"><strong>Carretas</strong><small>Saída sem peso ou retorno com peso</small></span>
+          <span class="choice-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="choice-card" id="chooseColetores" type="button" aria-controls="coletoresSection" aria-pressed="false">
+          <span class="choice-icon" aria-hidden="true">🚚</span>
+          <span class="choice-copy"><strong>Coletores / bairros</strong><small>Registrar coletor, bairro e fiscal</small></span>
+          <span class="choice-arrow" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </section>
+
+    <section id="carretasSection" class="work-section" aria-labelledby="carretasTitle" hidden>
+      <div class="section-heading work-heading">
+        <p class="eyebrow">Carretas</p>
+        <h2 id="carretasTitle">Qual etapa da viagem?</h2>
+        <p>A saída é registrada sem peso. O peso é informado apenas quando a carreta voltar do aterro.</p>
+      </div>
+
+      <div class="step-tabs" role="group" aria-label="Etapa da carreta">
+        <button type="button" id="showSaida" class="step-tab active" aria-controls="saidaPanel" aria-pressed="true"><span class="step-number">1</span> Registrar saída <small>sem peso</small></button>
+        <button type="button" id="showRetorno" class="step-tab" aria-controls="retornoPanel" aria-pressed="false"><span class="step-number">2</span> Registrar retorno <small>com peso</small></button>
+      </div>
+
+      <div id="saidaPanel" class="panel">
+        <div class="panel-title-row"><h3>Saída da carreta</h3><span class="pill">Sem peso nesta etapa</span></div>
+        <p class="panel-help">Informe os dados da viagem antes da ida ao aterro. O horário será registrado automaticamente.</p>
+        <form id="saidaForm" novalidate>
+          <div class="form-grid">
+            <div class="field"><label for="saidaPlaca">Placa da carreta <span aria-hidden="true">*</span></label><input id="saidaPlaca" name="placaCarreta" type="text" list="carretasPlates" autocomplete="off" autocapitalize="characters" placeholder="Ex.: ABC1D23" maxlength="15" required><small>Confira a placa antes de salvar.</small></div>
+            <div class="field"><label for="saidaManifesto">Número do manifesto</label><input id="saidaManifesto" name="manifesto" type="text" autocomplete="off" placeholder="Se houver" maxlength="80"></div>
+            <div class="field"><label for="saidaFiscal">Fiscal responsável <span aria-hidden="true">*</span></label><input id="saidaFiscal" name="fiscal" type="text" list="fiscals" autocomplete="name" placeholder="Nome do fiscal" maxlength="120" required></div>
+            <div class="field full"><label for="saidaObservacoes">Observações</label><textarea id="saidaObservacoes" name="observacoes" rows="2" maxlength="500" placeholder="Opcional"></textarea></div>
+          </div>
+          <div class="form-actions"><button class="primary-button" type="submit" id="saveSaida">Registrar saída sem peso</button></div>
+        </form>
+      </div>
+
+      <div id="retornoPanel" class="panel" hidden>
+        <div class="panel-title-row"><h3>Retorno da carreta</h3><span class="pill pill-yellow">Peso do comprovante</span></div>
+        <p class="panel-help">Escolha a saída registrada. Depois, informe o peso conforme o comprovante do aterro. O horário será registrado automaticamente.</p>
+        <form id="retornoForm" novalidate>
+          <div class="form-grid">
+            <div class="field full"><label for="retornoViagem">Qual carreta voltou? <span aria-hidden="true">*</span></label><select id="retornoViagem" name="viagemId" required><option value="">Carregando saídas abertas...</option></select><small id="retornoViagemHint">Selecione a saída correspondente para não registrar o retorno na carreta errada.</small></div>
+            <div class="field"><label for="retornoPeso">Peso no comprovante <span aria-hidden="true">*</span></label><input id="retornoPeso" name="peso" type="text" inputmode="decimal" autocomplete="off" placeholder="Ex.: 18500 ou 18,5" required></div>
+            <div class="field"><label for="retornoUnidade">Unidade do peso <span aria-hidden="true">*</span></label><select id="retornoUnidade" name="unidade" required><option value="kg">Quilogramas (kg)</option><option value="t">Toneladas (t)</option></select><small>Escolha a unidade escrita no comprovante.</small></div>
+            <div class="field"><label for="retornoTicket">Número do ticket / pesagem</label><input id="retornoTicket" name="ticket" type="text" autocomplete="off" placeholder="Se houver" maxlength="80"></div>
+            <div class="field"><label for="retornoFiscal">Fiscal responsável <span aria-hidden="true">*</span></label><input id="retornoFiscal" name="fiscal" type="text" list="fiscals" autocomplete="name" placeholder="Nome do fiscal" maxlength="120" required></div>
+            <div class="field full"><label for="retornoObservacoes">Observações</label><textarea id="retornoObservacoes" name="observacoes" rows="2" maxlength="500" placeholder="Opcional"></textarea></div>
+          </div>
+          <p class="weight-preview" id="weightPreview" aria-live="polite">Peso a registrar: —</p>
+          <div class="form-actions"><button class="primary-button" type="submit" id="saveRetorno">Registrar retorno com peso</button></div>
+        </form>
+      </div>
+
+      <details class="history" id="carretasHistory"><summary>Consultar registros de carretas</summary><div class="history-body"><div class="history-search"><label for="carretasSearch">Buscar placa ou manifesto</label><div><input id="carretasSearch" type="search" placeholder="Digite para buscar"><button class="secondary-button" type="button" id="searchCarretas">Buscar</button></div></div><div id="carretasHistoryItems" class="history-items"></div><button type="button" class="secondary-button" id="moreCarretas" hidden>Ver mais registros</button></div></details>
+    </section>
+
+    <section id="coletoresSection" class="work-section" aria-labelledby="coletoresTitle" hidden>
+      <div class="section-heading work-heading">
+        <p class="eyebrow">Coletores / bairros</p>
+        <h2 id="coletoresTitle">Registrar atividade do coletor</h2>
+        <p>O horário é automático. Se souber qual carreta recebeu a carga, informe a placa ou selecione a viagem aberta.</p>
+      </div>
+      <div class="panel">
+        <form id="coletorForm" novalidate>
+          <div class="form-grid">
+            <div class="field"><label for="coletorPlaca">Placa do coletor <span aria-hidden="true">*</span></label><input id="coletorPlaca" name="placaColetor" type="text" list="collectorPlates" autocomplete="off" autocapitalize="characters" placeholder="Ex.: ABC1D23" maxlength="15" required></div>
+            <div class="field"><label for="coletorBairro">Bairro <span aria-hidden="true">*</span></label><input id="coletorBairro" name="bairro" type="text" list="neighborhoods" autocomplete="address-level3" placeholder="Bairro atendido" maxlength="120" required></div>
+            <div class="field"><label for="coletorFiscal">Fiscal responsável <span aria-hidden="true">*</span></label><input id="coletorFiscal" name="fiscal" type="text" list="fiscals" autocomplete="name" placeholder="Nome do fiscal" maxlength="120" required></div>
+            <div class="field"><label for="coletorCarreta">Carreta que recebeu a carga</label><input id="coletorCarreta" name="placaCarreta" type="text" list="carretasPlates" autocomplete="off" autocapitalize="characters" placeholder="Placa, se souber" maxlength="15"><small>Pode ser preenchida mesmo antes da saída da carreta.</small></div>
+            <div class="field full"><label for="coletorViagem">Viagem da carreta (opcional)</label><select id="coletorViagem" name="viagemId"><option value="">Não sei a viagem / nenhuma viagem aberta</option></select><small>Selecione apenas se tiver certeza. A placa sozinha já permite relacionar registros no relatório, mas não identifica uma viagem específica.</small></div>
+            <div class="field full"><label for="coletorObservacoes">Observações</label><textarea id="coletorObservacoes" name="observacoes" rows="2" maxlength="500" placeholder="Opcional"></textarea></div>
+          </div>
+          <div class="form-actions"><button class="primary-button" type="submit" id="saveColetor">Registrar coletor e bairro</button></div>
+        </form>
+      </div>
+      <details class="history" id="coletoresHistory"><summary>Consultar registros de coletores</summary><div class="history-body"><div class="history-search"><label for="coletoresSearch">Buscar placa ou bairro</label><div><input id="coletoresSearch" type="search" placeholder="Digite para buscar"><button class="secondary-button" type="button" id="searchColetores">Buscar</button></div></div><div id="coletoresHistoryItems" class="history-items"></div><button type="button" class="secondary-button" id="moreColetores" hidden>Ver mais registros</button></div></details>
+    </section>
+
+    <datalist id="carretasPlates"></datalist>
+    <datalist id="collectorPlates"></datalist>
+    <datalist id="neighborhoods"></datalist>
+    <datalist id="fiscals"></datalist>
+  </main>
+
+  <footer class="site-footer">
+    <span>SELIM · Transbordo</span>
+    <button id="openReport" type="button" class="report-link">Relatório</button>
+  </footer>
+
+  <dialog id="reportDialog" class="report-dialog" aria-labelledby="reportTitle">
+    <div class="dialog-heading"><div><p class="eyebrow">Consulta protegida</p><h2 id="reportTitle">Relatório do Transbordo</h2></div><button type="button" class="icon-button" id="closeReport" aria-label="Fechar relatório">×</button></div>
+    <form id="reportForm" novalidate>
+      <div class="form-grid report-controls">
+        <div class="field"><label for="reportPeriod">Período</label><select id="reportPeriod" required><option value="semana">Semana</option><option value="mes">Mês</option></select></div>
+        <div class="field" id="reportDateField"><label for="reportDate">Escolha um dia da semana</label><input id="reportDate" type="date" required></div>
+        <div class="field" id="reportMonthField" hidden><label for="reportMonth">Mês</label><input id="reportMonth" type="month"></div>
+        <div class="field full"><label for="reportPassword">Senha do relatório</label><input id="reportPassword" type="password" autocomplete="current-password" required placeholder="Digite a senha"></div>
+      </div>
+      <button id="generateReport" class="primary-button" type="submit">Gerar relatório</button>
+    </form>
+    <p id="reportMessage" class="inline-message" role="status" aria-live="polite"></p>
+    <div id="reportOutput" class="report-output" hidden></div>
+    <details class="change-password" id="changePasswordDetails"><summary>Trocar senha do relatório</summary><form id="changePasswordForm" novalidate><div class="form-grid"><div class="field"><label for="currentPassword">Senha atual</label><input id="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label for="newPassword">Nova senha</label><input id="newPassword" type="password" autocomplete="new-password" minlength="6" required><small>Mínimo de 6 caracteres.</small></div></div><button class="secondary-button" id="changePasswordButton" type="submit">Salvar nova senha</button></form></details>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <iframe id="bridgeFrame" class="bridge-frame" title="Conexão com o banco de dados"></iframe>
+</body>
+</html>
