@@ -476,15 +476,19 @@ function legacyHistory_(book, kind) {
   const sheet = book.getSheetByName(TRANSBORDO.legadoTab);
   if (!sheet || sheet.getLastRow() < 2) return [];
   const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(cell => String(cell || '').trim());
   return data.slice(1).map((row, index) => {
     const raw = row.map(cell => cell instanceof Date
       ? Utilities.formatDate(cell, TRANSBORDO.timezone, 'dd/MM/yyyy HH:mm')
       : String(cell || '').trim());
     let compact;
     if (kind === 'carretas') {
-      const plates = headers.map((head, i) => raw[i] && /^[A-Z0-9]{7,8}$/i.test(head) ? head.toUpperCase() : '')
-        .filter(Boolean);
+      const map = typeof LEGACY_CARRETA_COLUMNS_ === 'object' ? LEGACY_CARRETA_COLUMNS_ : {};
+      const plates = [...new Set(Object.keys(map).filter(col => raw[Number(col)])
+        .map(col => map[col]))];
+      if (!plates.length && typeof legacyMentionedPlates_ === 'function') {
+        const known = [...new Set(Object.keys(map).map(col => map[col]))];
+        plates.push(...legacyMentionedPlates_(raw[6] || '', known));
+      }
       const plateLabel = plates.length === 1 ? plates[0] : plates.length > 1 ? 'várias carretas' : 'placa não identificada';
       compact = 'Carreta: ' + plateLabel + ' · ' + (raw[0] || 'sem data');
     } else {
