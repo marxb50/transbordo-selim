@@ -56,8 +56,12 @@ const OPTIONS = Object.freeze({
 });
 
 function doGet(e) {
+  const session = String((e && e.parameter && e.parameter.bridgeSession) || '');
+  if (session && (session.length < 8 || session.length > 100 || /[^A-Za-z0-9_-]/.test(session))) {
+    throw new Error('Sessão de conexão inválida.');
+  }
   const template = HtmlService.createTemplateFromFile('Index');
-  template.bridgeSession = String((e && e.parameter && e.parameter.bridgeSession) || '');
+  template.bridgeSession = session;
   return template.evaluate()
     .setTitle('SELIM Transbordo — conexão de dados')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -74,7 +78,7 @@ function getBootstrap() {
   const tabs = ensureTabs_();
   const openTrips = rowsAsObjects_(tabs.viagens, VIAGEM_HEADERS)
     .filter(row => row.status === 'EM_VIAGEM')
-    .map(publicTrip_)
+    .map(publicOpenTrip_)
     .reverse();
   return { success: true, openTrips: openTrips, options: OPTIONS };
 }
@@ -139,7 +143,7 @@ function registrarRetorno(data) {
     row.atualizadoEm = now;
     row.retornoRequestId = requestId;
     sheet.getRange(row._rowNumber, 1, 1, VIAGEM_HEADERS.length)
-      .setValues([VIAGEM_HEADERS.map(header => row[header])]);
+      .setValues([VIAGEM_HEADERS.map(header => sheetCell_(row[header]))]);
     return { success: true, viagem: publicTrip_(row) };
   });
 }
@@ -266,8 +270,8 @@ function alterarSenhaRelatorio(data) {
 }
 
 function aggregateReport_(events, allTrips, allCollectors, period, legacyQuality, legacyCollectorInvalidDates) {
-  const selected = events.filter(event => inPeriod_(event.retornoEm, period));
-  const previous = events.filter(event => inPeriod_(event.retornoEm, period.previous));
+  const selected = events.filter(event => inPeriod_(event.retornoEm, period) && toGrams_(event.pesoKg) !== null);
+  const previous = events.filter(event => inPeriod_(event.retornoEm, period.previous) && toGrams_(event.pesoKg) !== null);
   const byPlate = {};
   const byDay = {};
   let totalGrams = 0;
@@ -289,7 +293,6 @@ function aggregateReport_(events, allTrips, allCollectors, period, legacyQuality
   const previousGrams = previous.reduce((sum, event) => sum + (toGrams_(event.pesoKg) || 0), 0);
   const collectorSelected = allCollectors.filter(row => inPeriod_(row.registradoEm, period));
   const collectorByBairro = {};
-  const collectorByTrailer = {};
   let linked = 0;
   let linkedByTrip = 0;
   let legacyCollectorCount = 0;
@@ -301,12 +304,36 @@ function aggregateReport_(events, allTrips, allCollectors, period, legacyQuality
     if (placa) {
       linked++;
       if (row.viagemId) linkedByTrip++;
-      collectorByTrailer[placa] = (collectorByTrailer[placa] || 0) + 1;
     }
   });
-  const trailerTotals = {};
-  Object.keys(byPlate).forEach(placa => { trailerTotals[placa] = byPlate[placa].grams; });
+  const completedTrips = new Map(allTrips
+    .filter(trip => trip.status === 'CONCLUIDA' && inPeriod_(trip.retornoEm, period) &&
+      toGrams_(trip.pesoKg) !== null)
+    .map(trip => [String(trip.id), trip]));
+  const collectorByTrip = new Map();
+  allCollectors.forEach(row => {
+    if (row.source === 'legado' || !row.viagemId) return;
+    const trip = completedTrips.get(String(row.viagemId));
+    if (!trip) return;
+    const id = String(trip.id);
+    if (!collectorByTrip.has(id)) {
+      collectorByTrip.set(id, {
+        viagemId: id, placaCarreta: trip.placaCarreta,
+        manifesto: trip.manifesto, retornoEm: trip.retornoEm,
+        registros: 0, pesoKg: toGrams_(trip.pesoKg) / 1000
+      });
+    }
+    collectorByTrip.get(id).registros++;
+  });
+  const collectorByPlateOnly = {};
+  collectorSelected.forEach(row => {
+    if (row.source === 'legado' || row.viagemId || !row.placaCarreta) return;
+    const placa = row.placaCarreta;
+    collectorByPlateOnly[placa] = (collectorByPlateOnly[placa] || 0) + 1;
+  });
   const openTrips = allTrips.filter(row => row.status === 'EM_VIAGEM').length;
+  const invalidNewWeights = allTrips.filter(row => row.status === 'CONCLUIDA' &&
+    inPeriod_(row.retornoEm, period) && toGrams_(row.pesoKg) === null).length;
   const selectedNewCount = selected.length - legacyCount;
   return {
     periodoLabel: period.label, inicio: period.start, fim: period.end,
@@ -328,10 +355,12 @@ function aggregateReport_(events, allTrips, allCollectors, period, legacyQuality
       semVinculo: collectorSelected.length - linked,
       porBairro: Object.keys(collectorByBairro).map(key => ({ bairro: key, registros: collectorByBairro[key] }))
         .sort((a, b) => b.registros - a.registros),
-      porCarreta: Object.keys(collectorByTrailer).map(key => ({
-        placaCarreta: key, registros: collectorByTrailer[key],
-        pesoKg: (trailerTotals[key] || 0) / 1000
-      })).sort((a, b) => b.registros - a.registros)
+      porViagem: Array.from(collectorByTrip.values())
+        .sort((a, b) => new Date(b.retornoEm).getTime() - new Date(a.retornoEm).getTime() ||
+          a.placaCarreta.localeCompare(b.placaCarreta)),
+      porPlacaSemViagem: Object.keys(collectorByPlateOnly).map(placa => ({
+        placaCarreta: placa, registros: collectorByPlateOnly[placa]
+      })).sort((a, b) => b.registros - a.registros || a.placaCarreta.localeCompare(b.placaCarreta))
     },
     fontes: {
       viagensNovas: selectedNewCount,
@@ -342,12 +371,13 @@ function aggregateReport_(events, allTrips, allCollectors, period, legacyQuality
     },
     qualidade: {
       viagensEmAberto: openTrips,
+      viagensConcluidasPesoInvalido: invalidNewWeights,
       coletoresSemVinculo: collectorSelected.length - linked,
       legadoNaoConciliado: legacyQuality && (legacyQuality.unparsedWeightRows || 0),
       coletoresLegadosSemData: legacyCollectorInvalidDates || 0,
       legado: legacyQuality || {}
     },
-    avisoRelacao: 'O peso pertence à carreta/viagem. Registros de coletores associados não representam divisão do peso entre coletores.'
+    avisoRelacao: 'Vínculos por viagem aparecem no período do retorno; vínculos somente por placa aparecem no período do registro. O peso pertence à viagem, sem divisão entre coletores.'
   };
 }
 
@@ -356,6 +386,11 @@ function parseLegacyCollectors_(rows) {
   if (!rows || rows.length < 2) return result;
   rows.slice(1).forEach((row, index) => {
     if (!row.some(cell => String(cell || '').trim())) return;
+    // The old Form used the free-text fields for connectivity tests. Keep
+    // real neighborhoods, plates and fiscal names even if they contain TEST.
+    const testNotes = [row[3], row[5]].map(cell => String(cell || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    if (testNotes.some(note => /\bTEST(?:E)?\b/i.test(note))) return;
     const match = String(row[0] || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (!match) { result.invalidDates++; return; }
     const check = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]),
@@ -366,10 +401,15 @@ function parseLegacyCollectors_(rows) {
       match[4] + ':' + match[5] + ':' + (match[6] || '00') + '-03:00';
     const origin = String(row[2] || '').trim();
     const otherOrigin = String(row[3] || '').trim();
-    const bairro = /^(OUTROS?|OUTRA ORIGEM)$/i.test(origin) && otherOrigin ? otherOrigin : origin;
+    const bairro = (!origin || /^(OUTROS?|OUTRA ORIGEM)$/i.test(origin)) && otherOrigin
+      ? otherOrigin : origin;
+    const selectedPlate = String(row[1] || '').trim();
+    const otherPlates = String(row[5] || '').toUpperCase().matchAll(/\b([A-Z]{3})\s*([0-9][A-Z0-9])\s*([0-9]{2,3})\b/g);
+    const uniqueOtherPlates = [...new Set(Array.from(otherPlates, match => match[1] + match[2] + match[3]))];
+    const placaColetor = selectedPlate || (uniqueOtherPlates.length === 1 ? uniqueOtherPlates[0] : '');
     result.records.push({
       id: 'legado-coletor-' + (index + 2), source: 'legado', registradoEm: registradoEm,
-      placaColetor: String(row[1] || '').trim(), bairro: bairro || 'NÃO INFORMADO',
+      placaColetor: placaColetor, bairro: bairro || 'NÃO INFORMADO',
       fiscal: String(row[4] || '').trim(), placaCarreta: '', viagemId: ''
     });
   });
@@ -469,12 +509,32 @@ function rowsAsObjects_(sheet, headers) {
 }
 
 function appendObject_(sheet, headers, row) {
-  sheet.appendRow(headers.map(header => row[header]));
+  sheet.appendRow(headers.map(header => sheetCell_(row[header])));
+}
+
+function sheetCell_(value) {
+  // Campos livres chegam de um formulário público. O Sheets interpreta texto
+  // iniciado por estes caracteres como fórmula; o apóstrofo força texto literal.
+  return typeof value === 'string' && /^[=+\-@]/.test(value) ? "'" + value : value;
 }
 
 function legacyHistory_(book, kind) {
   const sheet = book.getSheetByName(TRANSBORDO.legadoTab);
   if (!sheet || sheet.getLastRow() < 2) return [];
+  if (kind === 'coletores') {
+    const data = sheet.getRange(1, 1, sheet.getLastRow(), 6).getDisplayValues();
+    return parseLegacyCollectors_(data).records.map(record => {
+      const sourceRow = Number(record.id.slice('legado-coletor-'.length));
+      const date = String((data[sourceRow - 1] || [])[0] || '').trim();
+      return {
+        id: 'legado-coletores-' + sourceRow, source: 'legado',
+        registradoEm: date,
+        descricao: 'Coletor: ' + (record.placaColetor || 'placa não informada') +
+          ' · Bairro: ' + record.bairro + ' · ' + date,
+        _search: [record.placaColetor, record.bairro].join(' ')
+      };
+    }).reverse();
+  }
   const data = sheet.getDataRange().getValues();
   return data.slice(1).map((row, index) => {
     const raw = row.map(cell => cell instanceof Date
@@ -513,6 +573,13 @@ function publicTrip_(row) {
     retornoEm: row.retornoEm, pesoKg: row.pesoKg,
     ticket: row.ticket, fiscalRetorno: row.fiscalRetorno,
     observacoesRetorno: row.observacoesRetorno
+  };
+}
+
+function publicOpenTrip_(row) {
+  return {
+    id: row.id, saidaEm: row.saidaEm,
+    placaCarreta: row.placaCarreta, manifesto: row.manifesto
   };
 }
 
@@ -565,7 +632,9 @@ function precisePeso_(value) {
 }
 function toGrams_(value) {
   const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? Math.round(num * 1000) : null;
+  if (!Number.isFinite(num) || num <= 0 || num > TRANSBORDO.maxPesoKg) return null;
+  const grams = Math.round(num * 1000);
+  return Math.abs(grams / 1000 - num) <= 0.000001 ? grams : null;
 }
 
 function assertReportPassword_(password) {

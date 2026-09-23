@@ -254,15 +254,20 @@ function parseLocaleWeight(raw, unit) {
   if (comma >= 0 && dot >= 0) {
     const decimal = comma > dot ? ',' : '.';
     const grouping = decimal === ',' ? '.' : ',';
+    const valid = decimal === ','
+      ? /^\d{1,3}(?:\.\d{3})+,\d+$/.test(value)
+      : /^\d{1,3}(?:,\d{3})+\.\d+$/.test(value);
+    if (!valid) return NaN;
     value = value.replaceAll(grouping, '').replace(decimal, '.');
   } else if (comma >= 0) {
-    const fragments = value.split(',');
-    value = fragments.length === 2 ? value.replace(',', '.') : fragments.slice(1).every(part => part.length === 3) ? value.replaceAll(',', '') : 'INVALID';
+    if (/^\d+,\d+$/.test(value)) value = value.replace(',', '.');
+    else if (/^\d{1,3}(?:,\d{3})+$/.test(value)) value = value.replaceAll(',', '');
+    else return NaN;
   } else if (dot >= 0) {
-    const fragments = value.split('.');
-    value = fragments.length === 2 && (unit === 't' || fragments[1].length !== 3)
-      ? value
-      : fragments.slice(1).every(part => part.length === 3) ? value.replaceAll('.', '') : 'INVALID';
+    if (/^\d+\.\d+$/.test(value) && value.indexOf('.') === dot) {
+      if (unit === 'kg' && /^\d{1,3}\.\d{3}$/.test(value)) value = value.replace('.', '');
+    } else if (/^\d{1,3}(?:\.\d{3})+$/.test(value)) value = value.replaceAll('.', '');
+    else return NaN;
   }
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return NaN;
@@ -534,18 +539,20 @@ function renderReport(report, periodo) {
   header.append(logo, headerText);
   root.appendChild(header);
 
+  root.appendChild(element('p', 'report-note report-source-note', 'O histórico dos Forms antigos foi copiado até 22/09/2026. Novos envios nesses Forms não entram automaticamente neste relatório. Para novos registros, use este aplicativo.'));
   root.appendChild(element('p', 'report-note', 'Nas viagens novas, o peso é contado na data de RETORNO da carreta. Dados antigos dos Forms entram no total apenas quando a conciliação confirma viagem e peso; registros conflitantes ou não conciliados ficam fora. O peso da carreta não é dividido nem atribuído individualmente aos coletores.'));
 
   const carretas = Array.isArray(report.porCarreta) ? report.porCarreta : [];
   const days = Array.isArray(report.porDia) ? report.porDia : [];
   const collectors = report.coletores || {};
   const sources = report.fontes || {};
-  const collectorByTrailer = Array.isArray(collectors.porCarreta) ? collectors.porCarreta : [];
+  const collectorByTrip = Array.isArray(collectors.porViagem) ? collectors.porViagem : [];
+  const collectorByPlateOnly = Array.isArray(collectors.porPlacaSemViagem) ? collectors.porPlacaSemViagem : [];
   const collectorByNeighborhood = Array.isArray(collectors.porBairro) ? collectors.porBairro : [];
   const trips = number(report.viagensConcluidas);
   const metrics = element('div', 'metric-grid');
   metrics.append(
-    metric('Peso total das carretas', formatKg(report.totalKg)),
+    metric('Peso confirmado das carretas', formatKg(report.totalKg)),
     metric('Viagens com retorno', integerFormat.format(trips)),
     metric('Média por viagem', trips ? formatKg(number(report.totalKg) / trips) : '—'),
     metric('Carretas com pesagem', integerFormat.format(carretas.length)),
@@ -556,7 +563,7 @@ function renderReport(report, periodo) {
     metrics.append(
       metric('Viagens novas', integerFormat.format(number(sources.viagensNovas))),
       metric('Viagens antigas verificadas', integerFormat.format(number(sources.viagensLegadasVerificadas))),
-      metric('Peso antigo verificado', formatKg(sources.pesoLegadoVerificadoKg))
+      metric('Peso histórico confirmado', formatKg(sources.pesoLegadoVerificadoKg))
     );
   }
   if (sources.coletoresNovos !== undefined || sources.coletoresLegados !== undefined) {
@@ -577,28 +584,34 @@ function renderReport(report, periodo) {
       ? 'Sem base anterior'
       : `${delta > 0 ? '+' : ''}${percentFormat.format(Number(comparison.variacaoPercentual))}%`;
     comparisonMetrics.append(
-      metric(humanPeriodLabel(comparison.periodoAnteriorLabel) || 'Período anterior', formatKg(comparison.totalAnteriorKg)),
-      metric('Diferença de peso', `${delta > 0 ? '+' : ''}${kgFormat.format(delta)} kg`),
+      metric(`Peso confirmado · ${humanPeriodLabel(comparison.periodoAnteriorLabel) || 'período anterior'}`, formatKg(comparison.totalAnteriorKg)),
+      metric('Diferença de peso confirmado', `${delta > 0 ? '+' : ''}${kgFormat.format(delta)} kg`),
       metric('Variação', variation)
     );
     comparisonSection.appendChild(comparisonMetrics);
     root.appendChild(comparisonSection);
   }
 
-  root.appendChild(weightChart('Peso por carreta', carretas, row => plate(row.placa), row => row.pesoKg));
-  root.appendChild(weightChart('Peso por dia de retorno', days, row => humanDay(row.dia), row => row.pesoKg));
+  root.appendChild(weightChart('Peso confirmado por carreta', carretas, row => plate(row.placa), row => row.pesoKg));
+  root.appendChild(weightChart('Peso confirmado por dia de retorno', days, row => humanDay(row.dia), row => row.pesoKg));
 
   const trailerSection = reportSection('Totais de cada carreta');
   trailerSection.appendChild(reportTable([
-    { label: 'Carreta' }, { label: 'Viagens', numeric: true }, { label: 'Peso total', numeric: true }, { label: 'Média por viagem', numeric: true }
+    { label: 'Carreta' }, { label: 'Viagens', numeric: true }, { label: 'Peso confirmado', numeric: true }, { label: 'Média por viagem', numeric: true }
   ], carretas.map(row => [plate(row.placa), integerFormat.format(number(row.viagens)), formatKg(row.pesoKg), number(row.viagens) ? formatKg(number(row.pesoKg) / number(row.viagens)) : '—'])));
   root.appendChild(trailerSection);
 
   const relationSection = reportSection('Relação entre carretas e coletores');
-  relationSection.appendChild(element('p', 'report-note', 'A quantidade de registros de coletores vinculados aparece ao lado do peso total da carreta no período. Isso mostra a relação operacional, mas NÃO significa que cada coletor transportou uma fração desse peso. Quando há apenas placa e não uma viagem identificada, a relação é por placa e período. Os registros antigos de coletores contam no total quando a data é válida, mas não recebem vínculo de carreta automaticamente.'));
+  relationSection.appendChild(element('p', 'report-note', 'Os totais de coletores usam a data do registro. A tabela de viagens usa a data de retorno e pode incluir coletores registrados em outro período. O peso confirmado pertence à viagem inteira; não é dividido por coletor. A tabela por placa não associa peso. Coletores antigos sem vínculo entram apenas nos totais quando a data é válida.'));
+  relationSection.appendChild(element('h5', '', 'Viagens com coletores vinculados e retorno no período'));
   relationSection.appendChild(reportTable([
-    { label: 'Carreta' }, { label: 'Registros de coletores relacionados', numeric: true }, { label: 'Peso total da carreta', numeric: true }
-  ], collectorByTrailer.map(row => [plate(row.placaCarreta), integerFormat.format(number(row.registros)), formatKg(row.pesoKg)])));
+    { label: 'Carreta' }, { label: 'Manifesto' }, { label: 'Retorno' },
+    { label: 'Registros de coletores vinculados', numeric: true }, { label: 'Peso confirmado da viagem (não por coletor)', numeric: true }
+  ], collectorByTrip.map(row => [plate(row.placaCarreta), clean(row.manifesto) || '—', formatDateTime(row.retornoEm), integerFormat.format(number(row.registros)), formatKg(row.pesoKg)])));
+  relationSection.appendChild(element('h5', '', 'Registros com apenas a placa, sem viagem identificada'));
+  relationSection.appendChild(reportTable([
+    { label: 'Carreta' }, { label: 'Registros de coletores', numeric: true }
+  ], collectorByPlateOnly.map(row => [plate(row.placaCarreta), integerFormat.format(number(row.registros))])));
   root.appendChild(relationSection);
 
   const neighborhoodSection = reportSection('Coletores por bairro');
@@ -615,12 +628,12 @@ function renderReport(report, periodo) {
     element('span', 'quality-chip', `Coletores sem vínculo de carreta: ${integerFormat.format(number(quality.coletoresSemVinculo ?? collectors.semVinculo))}`),
     element('span', 'quality-chip', `Registros legados não conciliados na base: ${integerFormat.format(number(quality.legadoNaoConciliado))}`)
   );
-  if (collectors.vinculadosViagem !== undefined) chips.appendChild(element('span', 'quality-chip', `Coletores com viagem exata: ${integerFormat.format(number(collectors.vinculadosViagem))}`));
+  if (collectors.vinculadosViagem !== undefined) chips.appendChild(element('span', 'quality-chip', `Registros com viagem informada no período do lançamento: ${integerFormat.format(number(collectors.vinculadosViagem))}`));
   if (quality.coletoresLegadosSemData !== undefined) chips.appendChild(element('span', 'quality-chip', `Coletores antigos sem data válida na base: ${integerFormat.format(number(quality.coletoresLegadosSemData))}`));
   qualitySection.appendChild(chips);
   root.appendChild(qualitySection);
 
-  const printButton = element('button', 'secondary-button', 'Imprimir / salvar PDF');
+  const printButton = element('button', 'secondary-button report-print-button', 'Imprimir / salvar PDF');
   printButton.type = 'button';
   printButton.addEventListener('click', () => window.print());
   root.appendChild(printButton);
@@ -754,6 +767,22 @@ async function demoCall(method, args) {
     if (!input.senha) return { success: false, message: 'Informe uma senha para testar a tela.' };
     const returned = demo.trips.reduce((sum, trip) => sum + number(trip.pesoKg), 0);
     const demoKg = returned || 57200;
+    const demoExactTrips = demo.trips.length
+      ? demo.trips.map(trip => ({
+        viagemId: trip.id, placaCarreta: trip.placaCarreta,
+        manifesto: trip.manifesto || '', retornoEm: trip.retornoEm,
+        registros: demo.collectors.filter(row => row.viagemId === trip.id).length,
+        pesoKg: number(trip.pesoKg)
+      })).filter(trip => trip.registros > 0)
+      : [{ viagemId: 'DEMO-H1', placaCarreta: 'QGB1A23', manifesto: 'M-2026-001', retornoEm: new Date().toISOString(), registros: 1, pesoKg: 38200 }];
+    const demoPlateOnly = demo.collectors.length
+      ? Object.values(demo.collectors.filter(row => row.placaCarreta && !row.viagemId).reduce((byPlate, row) => {
+        const placa = plate(row.placaCarreta);
+        byPlate[placa] = byPlate[placa] || { placaCarreta: placa, registros: 0 };
+        byPlate[placa].registros++;
+        return byPlate;
+      }, {}))
+      : [{ placaCarreta: 'QGB1A23', registros: 2 }];
     return { success: true, report: {
       periodoLabel: input.periodo === 'mes' ? 'Mês selecionado · exemplo fictício' : 'Semana selecionada · exemplo fictício',
       totalKg: demoKg, viagensConcluidas: demo.trips.length || 3,
@@ -761,7 +790,7 @@ async function demoCall(method, args) {
       porDia: [{ dia: 'Segunda', pesoKg: returned || 38200 }, { dia: 'Terça', pesoKg: returned ? 0 : 19000 }],
       coletores: { total: demo.collectors.length || 5, vinculados: demo.collectors.filter(row => row.placaCarreta).length || 3, semVinculo: demo.collectors.filter(row => !row.placaCarreta).length || 2,
         porBairro: [{ bairro: 'Centro', registros: 3 }, { bairro: 'Nova Esperança', registros: 2 }],
-        porCarreta: [{ placaCarreta: 'QGB1A23', registros: 3, pesoKg: returned || 38200 }] },
+        porViagem: demoExactTrips, porPlacaSemViagem: demoPlateOnly },
       qualidade: { viagensEmAberto: demo.openTrips.length, coletoresSemVinculo: 2, legadoNaoConciliado: 0 }
     } };
   }
