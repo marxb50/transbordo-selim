@@ -491,13 +491,17 @@ function legacyHistory_(book, kind) {
       }
       const plateLabel = plates.length === 1 ? plates[0] : plates.length > 1 ? 'várias carretas' : 'placa não identificada';
       compact = 'Carreta: ' + plateLabel + ' · ' + (raw[0] || 'sem data');
+      const manifests = raw.join(' ').match(/\b00[1-9]\d{4}\b/g) || [];
+      return { id: 'legado-' + kind + '-' + (index + 2), source: 'legado',
+        registradoEm: raw[0] || '', descricao: compact,
+        _search: plates.join(' ') + ' ' + [...new Set(manifests)].join(' ') };
     } else {
       compact = 'Coletor: ' + (raw[1] || 'placa não informada') +
         ' · Bairro: ' + (raw[2] || 'não informado') + ' · ' + (raw[0] || 'sem data');
+      return { id: 'legado-' + kind + '-' + (index + 2), source: 'legado',
+        registradoEm: raw[0] || '', descricao: compact,
+        _search: [raw[1], raw[2], raw[3]].join(' ') };
     }
-    return { id: 'legado-' + kind + '-' + (index + 2), source: 'legado',
-      registradoEm: raw[0] || '', descricao: compact,
-      _search: raw.join(' ') };
   }).filter(item => item.registradoEm).reverse();
 }
 
