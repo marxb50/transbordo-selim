@@ -562,9 +562,20 @@ function toGrams_(value) {
 
 function assertReportPassword_(password) {
   const props = PropertiesService.getScriptProperties();
-  const salt = props.getProperty('REPORT_PASSWORD_SALT');
-  const expected = props.getProperty('REPORT_PASSWORD_HASH');
-  if (!salt || !expected) throw new Error('Senha do relatório ainda não configurada pelo administrador.');
+  let salt = props.getProperty('REPORT_PASSWORD_SALT');
+  let expected = props.getProperty('REPORT_PASSWORD_HASH');
+  if (!salt || !expected) {
+    // A senha inicial é informada pelo proprietário, manualmente, nas
+    // propriedades privadas do projeto. No primeiro uso correto, migra para
+    // hash com sal; nem a senha nem o hash entram no GitHub Pages.
+    const initial = props.getProperty('REPORT_PASSWORD_INITIAL');
+    if (!initial) throw new Error('Senha do relatório ainda não configurada pelo administrador.');
+    if (String(password || '') !== initial) throw new Error('Senha incorreta.');
+    salt = Utilities.getUuid();
+    expected = sha256_(salt + ':' + initial);
+    props.setProperties({ REPORT_PASSWORD_SALT: salt, REPORT_PASSWORD_HASH: expected });
+    props.deleteProperty('REPORT_PASSWORD_INITIAL');
+  }
   const supplied = sha256_(salt + ':' + String(password || ''));
   if (supplied !== expected) throw new Error('Senha incorreta.');
 }

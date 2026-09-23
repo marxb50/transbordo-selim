@@ -37,8 +37,10 @@ relatório deste aplicativo, a equipe deve usar este novo link.
 - `backend/Code.gs`, `backend/Legacy.gs`, `backend/Index.html`: Apps Script
   implantado no projeto copiado `TRANSBORDO — CÓPIA marxb50`.
 - `SCRIPT_BRIDGE_URL` em `app.js`: URL da implantação do Apps Script.
-- `REPORT_PASSWORD_SALT` e `REPORT_PASSWORD_HASH`: propriedades privadas do
-  projeto Apps Script; nunca inserir a senha em `app.js` ou no repositório.
+- O proprietário informa uma vez `REPORT_PASSWORD_INITIAL` nas propriedades
+  privadas do projeto Apps Script. No primeiro relatório com a senha certa, o
+  servidor substitui esse valor por `REPORT_PASSWORD_SALT` e
+  `REPORT_PASSWORD_HASH`. Nunca inserir a senha em `app.js` ou no repositório.
 - Testes locais: `node --test backend/code.test.js backend/legacy-parser.test.js`.
 
 Ao implantar Apps Script, executar como proprietário para que o formulário

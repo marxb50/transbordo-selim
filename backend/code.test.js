@@ -51,7 +51,8 @@ function makeRuntime() {
     LockService: {getScriptLock() {return {tryLock() {return true;}, releaseLock() {}};}},
     PropertiesService: {getScriptProperties() {return {
       getProperty(key) {return properties.get(key) || null;},
-      setProperties(values) {Object.entries(values).forEach(([k, v]) => properties.set(k, v));}
+      setProperties(values) {Object.entries(values).forEach(([k, v]) => properties.set(k, v));},
+      deleteProperty(key) {properties.delete(key);}
     };}},
     Utilities: {
       getUuid() {return `test-uuid-${++nextId}`;},
@@ -126,4 +127,17 @@ test('senha incorreta não libera relatório e pode ser trocada', () => {
   assert.throws(() => api.gerarRelatorio({senha:'errada',periodo:'mes',referencia:'2026-09'}),/Senha incorreta/);
   assert.equal(api.alterarSenhaRelatorio({senhaAtual:'310186',novaSenha:'nova-senha-forte'}).success,true);
   assert.throws(() => api.gerarRelatorio({senha:'310186',periodo:'mes',referencia:'2026-09'}),/Senha incorreta/);
+});
+
+test('senha inicial privada migra para hash após primeiro uso correto', () => {
+  const {api,properties} = makeRuntime();
+  properties.delete('REPORT_PASSWORD_SALT');
+  properties.delete('REPORT_PASSWORD_HASH');
+  properties.set('REPORT_PASSWORD_INITIAL','310186');
+  assert.throws(() => api.gerarRelatorio({senha:'errada',periodo:'mes',referencia:'2026-09'}),/Senha incorreta/);
+  assert.equal(properties.get('REPORT_PASSWORD_INITIAL'),'310186');
+  const result = api.gerarRelatorio({senha:'310186',periodo:'mes',referencia:'2026-09'});
+  assert.equal(result.success,true);
+  assert.equal(properties.has('REPORT_PASSWORD_INITIAL'),false);
+  assert.ok(properties.get('REPORT_PASSWORD_HASH'));
 });
